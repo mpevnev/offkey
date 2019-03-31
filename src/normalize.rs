@@ -35,44 +35,68 @@ impl<T> OmniNormal for T where
         + NormalTarget<f64>
 {}
 
-macro_rules! impl_for_int {
-    ($integer:ident, $float:ident) => {
-        impl Normal<$float> for $integer {
-            fn normalize(self) -> $float {
-                let min = $integer::min_value() as $float;
-                let max = $integer::max_value() as $float;
-                let s = self as $float;
-                (s - min) / (max - min)
+macro_rules! impl_for_int_lossless {
+    ($integer:ident, $($float:ident),*) => {
+        $(
+            impl Normal<$float> for $integer {
+                fn normalize(self) -> $float {
+                    let min = $float::from($integer::min_value());
+                    let max = $float::from($integer::max_value());
+                    let s = $float::from(self);
+                    (s - min) / (max - min)
+                }
             }
-        }
+        )*
     };
 }
 
-macro_rules! impl_for_float {
-    ($source:ident, $target:ident) => {
-        impl Normal<$target> for $source {
-            fn normalize(self) -> $target {
-                self as $target
+macro_rules! impl_for_int_lossy {
+    ($integer:ident, $($float:ident),*) => {
+        $(
+            impl Normal<$float> for $integer {
+                fn normalize(self) -> $float {
+                    let min = $integer::min_value() as $float;
+                    let max = $integer::max_value() as $float;
+                    let s = self as $float;
+                    (s - min) / (max - min)
+                }
             }
-        }
-    };
+        )*
+    }
 }
 
-macro_rules! impl_both_for_int {
-    ($integer:ident) => {
-        impl_for_int!($integer, f32);
-        impl_for_int!($integer, f64);
-    };
+macro_rules! impl_for_float_identity {
+    ($($float:ident),*) => {
+        $(
+            impl Normal<$float> for $float {
+                fn normalize(self) -> $float {
+                    self
+                }
+            }
+        )*
+    }
 }
 
-impl_both_for_int!(i8);
-impl_both_for_int!(i16);
-impl_both_for_int!(i32);
-impl_both_for_int!(u8);
-impl_both_for_int!(u16);
-impl_both_for_int!(u32);
+impl_for_int_lossless!(i8, f32, f64);
+impl_for_int_lossless!(u8, f32, f64);
+impl_for_int_lossless!(i16, f32, f64);
+impl_for_int_lossless!(u16, f32, f64);
+impl_for_int_lossless!(i32, f64);
+impl_for_int_lossless!(u32, f64);
 
-impl_for_float!(f32, f64);
-impl_for_float!(f32, f32);
-impl_for_float!(f64, f32);
-impl_for_float!(f64, f64);
+impl_for_int_lossy!(i32, f32);
+impl_for_int_lossy!(u32, f32);
+
+impl_for_float_identity!(f32, f64);
+
+impl Normal<f32> for f64 {
+    fn normalize(self) -> f32 {
+        self as f32
+    }
+}
+
+impl Normal<f64> for f32 {
+    fn normalize(self) -> f64 {
+        f64::from(self)
+    }
+}

@@ -1,5 +1,6 @@
 use advanced_collections::circular_buffer::CircularBuffer;
 use alsa::pcm::{Format, IO, PCM};
+use itertools::Itertools;
 use rustfft::num_complex::Complex;
 use rustfft::num_traits::Num;
 
@@ -10,16 +11,19 @@ use IOBuf::*;
 /* ---------- helper macros ---------- */
 
 macro_rules! read_more {
-    ($io:ident, $scratch:ident, $buftype:ident, $buf:ident) => {{
+    ($self:ident, $io:ident, $scratch:ident, $sample_type:ident) => {{
         let read = $io.readi($scratch)?;
-        $buf.extend(
+        $self.buf.extend(
             $scratch
-            .iter()
-            .take(read)
-            .cloned()
-            .map(T::from_unnormalized)
-            .map(|r| Complex::new(r, T::zero()))
-            );
+                .iter()
+                .take(read)
+                .cloned()
+                .map($sample_type::from_unnormalized)
+                .chunks($self.num_channels)
+                .into_iter()
+                .map(average)
+                .map(|r| Complex::new(r, T::zero())),
+        );
         Ok(())
     }};
 }
@@ -29,6 +33,8 @@ macro_rules! read_more {
 pub struct Input<'a, T> {
     source: IOBuf<'a>,
     buf: CircularBuffer<Complex<T>>,
+    num_channels: usize,
+    sample_frequency: f64,
 }
 
 pub enum IOBuf<'a> {
@@ -56,43 +62,39 @@ impl<'a, T: Default> Input<'a, T> {
             Format::U16LE | Format::U16BE => U16(pcm.io_u16()?, vec![0; scratchsize]),
             Format::S32LE | Format::S32BE => I32(pcm.io_i32()?, vec![0; scratchsize]),
             Format::U32LE | Format::U32BE => U32(pcm.io_u32()?, vec![0; scratchsize]),
-            Format::FloatLE | Format::FloatBE => F32(pcm.io_f32()?, vec![0.0; scratchsize]),
+            Format::FloatLE | Format::FloatBE => {
+                F32(pcm.io_f32()?, vec![0.0; scratchsize])
+            }
             Format::Float64LE | Format::Float64BE => {
                 F64(pcm.io_f64()?, vec![0.0; scratchsize])
             }
             _ => return Err(alsa::Error::unsupported("Unsupported sample format")),
         };
         let rate = params.get_rate()?.max(1) as usize;
-        let mut buf = repeat_with(Complex::default)
-            .take(2 * rate * buffer_millis / 1000 * num_channels)
+        let buf = repeat_with(Complex::default)
+            .take(rate * buffer_millis / 1000)
             .collect::<CircularBuffer<_>>();
-        buf.resize(buf.capacity());
         Ok(Input {
             source: src,
             buf,
+            num_channels,
+            sample_frequency: rate as f64,
         })
-    }
-}
-
-impl<'a> IOBuf<'a> {
-    pub fn read<T>(&mut self, buf: &mut CircularBuffer<Complex<T>>) -> alsa::Result<()>
-        where T: OmniNormal + Num + Clone  {
-        match self {
-            I8(io, scratch) => read_more!(io, scratch, T, buf),
-            U8(io, scratch) => read_more!(io, scratch, T, buf),
-            I16(io, scratch) => read_more!(io, scratch, T, buf),
-            U16(io, scratch) => read_more!(io, scratch, T, buf),
-            I32(io, scratch) => read_more!(io, scratch, T, buf),
-            U32(io, scratch) => read_more!(io, scratch, T, buf),
-            F32(io, scratch) => read_more!(io, scratch, T, buf),
-            F64(io, scratch) => read_more!(io, scratch, T, buf),
-        }
     }
 }
 
 impl<'a, T: OmniNormal + Num + Clone> Input<'a, T> {
     pub fn read(&mut self) -> alsa::Result<()> {
-        self.source.read(&mut self.buf)
+        match &mut self.source {
+            I8(io, scratch) => read_more!(self, io, scratch, T),
+            U8(io, scratch) => read_more!(self, io, scratch, T),
+            I16(io, scratch) => read_more!(self, io, scratch, T),
+            U16(io, scratch) => read_more!(self, io, scratch, T),
+            I32(io, scratch) => read_more!(self, io, scratch, T),
+            U32(io, scratch) => read_more!(self, io, scratch, T),
+            F32(io, scratch) => read_more!(self, io, scratch, T),
+            F64(io, scratch) => read_more!(self, io, scratch, T),
+        }
     }
 }
 
@@ -100,4 +102,32 @@ impl<'a, T: Clone> Input<'a, T> {
     pub fn get_frames(&self) -> Vec<Complex<T>> {
         self.buf.iter().cloned().collect()
     }
+}
+
+impl<'a, T> Input<'a, T> {
+    pub fn buf_len(&self) -> usize {
+        self.buf.len()
+    }
+
+    pub fn frequency_at(&self, index: usize) -> f64 {
+        let index = index as f64;
+        let len = self.buf_len() as f64;
+        index * self.sample_frequency / len
+    }
+}
+
+/* ---------- helpers ---------- */
+
+fn average<T, I>(iter: T) -> I
+where
+    I: Num,
+    T: Iterator<Item = I>,
+{
+    let mut count = I::zero();
+    let mut total = I::zero();
+    for v in iter {
+        count = count + I::one();
+        total = total + v;
+    }
+    total / count
 }
