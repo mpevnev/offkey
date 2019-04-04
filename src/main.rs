@@ -2,12 +2,11 @@
 
 mod input;
 mod mic;
-mod normalize;
+mod sample;
 
 use std::env::args;
 use std::sync::Arc;
 
-use advanced_collections::circular_buffer::CircularBuffer;
 use alsa::pcm::PCM;
 use nix::Errno;
 use ordered_float::NotNan;
@@ -18,7 +17,7 @@ use rustfft::{FFTplanner, FFT};
 
 use input::Input;
 use mic::{open_microphone, MicSettings};
-use normalize::OmniNormal;
+use sample::FromAnySample;
 
 fn main() -> Result<(), String> {
     let device_name = args().nth(1).ok_or("usage: offkey <input device>")?;
@@ -28,21 +27,16 @@ fn main() -> Result<(), String> {
     };
     let mic = open_microphone(&device_name, set)
         .map_err(|e| format!("Failed to open the microphone: {}", e))?;
-    let mut input: Input<'_, f64> = Input::from_pcm(&mic, 300)
+    let mut input: Input<'_, f64> = Input::from_pcm(&mic, 800)
         .map_err(|e| format!("Failed to initialize input: {}", e))?;
     let fft = make_fft(&input);
     let mut fft_output = vec![Complex::zero(); input.buf_len()];
-    let mut old_buckets = CircularBuffer::new(10);
     loop {
         let mut inbuf = make_frame_buffer(&mic, &mut input)?;
         fft.process(&mut inbuf, &mut fft_output);
         let max = max_index(&fft_output[0..fft_output.len() / 2], 1e-3);
         if let Some(max) = max {
-            old_buckets.push_front(max);
-        }
-        if let Some(avg) = average_index(&old_buckets) {
-            eprintln!("{}", input.frequency_at(avg));
-            println!("{}", avg);
+            eprintln!("{}", input.frequency_at(max));
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
@@ -53,7 +47,7 @@ fn make_frame_buffer<'a, T>(
     input: &mut Input<'a, T>,
 ) -> Result<Vec<Complex<T>>, String>
 where
-    T: OmniNormal + Num + Clone,
+    T: FromAnySample + Num + Clone,
 {
     if let Err(e) = input.read() {
         match e.errno() {
@@ -83,14 +77,10 @@ where
     buf.iter()
         .map(Complex::norm)
         .enumerate()
-        // The first number is not related to frequencies, so is not needed.
+        // Really, really don't need the data for 0 frequency.
         .skip(1)
         .flat_map(|(i, f)| NotNan::new(f).map(|nnan| (i, nnan)))
         .filter(|(_, f)| f.into_inner() > threshold)
         .max_by_key(|(_, f)| *f)
         .map(|(i, _)| i)
-}
-
-fn average_index(buf: &CircularBuffer<usize>) -> Option<usize> {
-    buf.iter().sum::<usize>().checked_div(buf.len())
 }

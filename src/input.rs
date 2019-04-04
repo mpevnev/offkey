@@ -4,7 +4,7 @@ use itertools::Itertools;
 use rustfft::num_complex::Complex;
 use rustfft::num_traits::Num;
 
-use crate::normalize::OmniNormal;
+use crate::sample::FromAnySample;
 
 use IOBuf::*;
 
@@ -18,7 +18,7 @@ macro_rules! read_more {
                 .iter()
                 .take(read)
                 .cloned()
-                .map($sample_type::from_unnormalized)
+                .map($sample_type::from_sample)
                 .chunks($self.num_channels)
                 .into_iter()
                 .map(average)
@@ -83,7 +83,7 @@ impl<'a, T: Default> Input<'a, T> {
     }
 }
 
-impl<'a, T: OmniNormal + Num + Clone> Input<'a, T> {
+impl<'a, T: FromAnySample + Num + Clone> Input<'a, T> {
     pub fn read(&mut self) -> alsa::Result<()> {
         match &mut self.source {
             I8(io, scratch) => read_more!(self, io, scratch, T),

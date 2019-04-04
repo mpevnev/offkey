@@ -2,37 +2,37 @@ pub trait Normal<T> {
     fn normalize(self) -> T;
 }
 
-pub trait NormalTarget<T> {
-    fn from_unnormalized(unnorm: T) -> Self;
+pub trait FromSample<T> {
+    fn from_sample(unnorm: T) -> Self;
 }
 
-pub trait OmniNormal:
-    NormalTarget<i8>
-    + NormalTarget<i16>
-    + NormalTarget<i32>
-    + NormalTarget<u8>
-    + NormalTarget<u16>
-    + NormalTarget<u32>
-    + NormalTarget<f32>
-    + NormalTarget<f64>
+pub trait FromAnySample:
+    FromSample<i8>
+    + FromSample<i16>
+    + FromSample<i32>
+    + FromSample<u8>
+    + FromSample<u16>
+    + FromSample<u32>
+    + FromSample<f32>
+    + FromSample<f64>
 {
 }
 
-impl<A: Normal<B>, B> NormalTarget<A> for B {
-    fn from_unnormalized(un: A) -> Self {
+impl<A: Normal<B>, B> FromSample<A> for B {
+    fn from_sample(un: A) -> Self {
         un.normalize()
     }
 }
 
-impl<T> OmniNormal for T where
-    T: NormalTarget<i8>
-        + NormalTarget<i16>
-        + NormalTarget<i32>
-        + NormalTarget<u8>
-        + NormalTarget<u16>
-        + NormalTarget<u32>
-        + NormalTarget<f32>
-        + NormalTarget<f64>
+impl<T> FromAnySample for T where
+    T: FromSample<i8>
+        + FromSample<i16>
+        + FromSample<i32>
+        + FromSample<u8>
+        + FromSample<u16>
+        + FromSample<u32>
+        + FromSample<f32>
+        + FromSample<f64>
 {}
 
 macro_rules! impl_for_int_lossless {
