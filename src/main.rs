@@ -5,8 +5,10 @@ mod input;
 mod mic;
 mod note;
 mod sample;
+mod text;
 
 use std::env::args;
+use std::fs::File;
 use std::sync::Arc;
 
 use alsa::pcm::PCM;
@@ -22,9 +24,11 @@ use input::Input;
 use mic::{open_microphone, MicSettings};
 use note::Position;
 use sample::FromAnySample;
+use text::Text;
 
 fn main() -> Result<(), String> {
-    let device_name = args().nth(1).ok_or("usage: offkey <input device>")?;
+    let device_name = args().nth(1).ok_or("usage: offkey <input device> <strings file>")?;
+    let strings_file = args().nth(2).ok_or("usage: offkey <input device> <strings file>")?;
     let set = MicSettings {
         access: Some(alsa::pcm::Access::RWInterleaved),
         ..MicSettings::default()
@@ -33,6 +37,11 @@ fn main() -> Result<(), String> {
         .map_err(|e| format!("Failed to open the microphone: {}", e))?;
     let mut input: Input<'_, f64> = Input::from_pcm(&mic, 800)
         .map_err(|e| format!("Failed to initialize input: {}", e))?;
+    let strings_file = File::open(strings_file)
+        .map_err(|e| format!("Failed to open strings file: {}", e))?;
+    let text = Text::from_reader(strings_file)
+        .map_err(|e| format!("Failed to deserialize strings: {}", e))?;
+    text.validate()?;
     let fft = make_fft(&input);
     let mut fft_output = vec![Complex::zero(); input.buf_len()];
     let mut curses = init_curses()?;
@@ -44,7 +53,7 @@ fn main() -> Result<(), String> {
             let freq = input.frequency_at(max);
             let pos = Position::from_frequency(freq);
             if let Some(pos) = pos {
-                draw_state(&mut curses, pos, freq)?;
+                draw_state(&mut curses, &text, pos, freq)?;
             }
             if is_done(&mut curses) {
                 break;

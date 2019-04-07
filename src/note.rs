@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use std::ops::Sub;
 
 use rustfft::num_traits::Float;
+use serde::Deserialize;
 
 use Accidental::*;
 use Note::*;
@@ -29,11 +30,12 @@ pub struct Position {
 /// This is a very thin wrapper over an octave number according to the
 /// scientific naming system. Sub Contra octave is 0, and the First octave is
 /// 4.
-#[derive(Debug, PartialEq, PartialOrd, Clone, Copy)]
-pub struct Octave(i32);
+#[serde(transparent)]
+#[derive(Debug, PartialEq, PartialOrd, Clone, Copy, Hash, Deserialize)]
+pub struct Octave(pub i32);
 
 #[repr(i32)]
-#[derive(Debug, PartialEq, PartialOrd, Clone, Copy)]
+#[derive(Debug, PartialEq, PartialOrd, Clone, Copy, Hash, Deserialize)]
 pub enum Note {
     C = 0,
     D = 2,
@@ -44,7 +46,7 @@ pub enum Note {
     B = 11,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy, Hash, Deserialize)]
 pub enum Accidental {
     Flat,
     Sharp,
@@ -136,6 +138,14 @@ impl Octave {
     }
 }
 
+impl Eq for Octave { }
+
+impl Ord for Octave {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.cmp(&other.0)
+    }
+}
+
 /* ---------- note manipulation ---------- */
 
 impl Note {
@@ -183,6 +193,8 @@ impl Sub for Note {
     }
 }
 
+impl Eq for Note { }
+
 /* ---------- accidental manipulation ---------- */
 
 impl Accidental {
@@ -201,3 +213,5 @@ impl Default for Accidental {
         Natural
     }
 }
+
+impl Eq for Accidental { }

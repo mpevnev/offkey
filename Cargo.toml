@@ -12,3 +12,8 @@ nix = "0.9"
 ordered-float = "1.0"
 pancurses-result = "0.5"
 rustfft = "3.0"
+serde_yaml = "0.8"
+
+[dependencies.serde]
+version = "1.0"
+features = ["derive"]

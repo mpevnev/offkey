@@ -4,6 +4,7 @@ use pancurses_result::{initscr, Curses, Window};
 use pancurses_result::{Input::Character};
 
 use crate::note::Position;
+use crate::text::Text;
 
 pub fn init_curses() -> Result<Curses, String> {
     let mut res =
@@ -16,6 +17,7 @@ pub fn init_curses() -> Result<Curses, String> {
 
 pub fn draw_state(
     curses: &mut Curses,
+    text: &Text,
     position: Position,
     _freq: f64,
 ) -> Result<(), String> {
@@ -24,14 +26,13 @@ pub fn draw_state(
         .map_err(|()| String::from("Failed to clear the window"))?;
     win.draw_box('|', '-')
         .map_err(|()| String::from("Failed to draw borders"))?;
-    let (maxx, maxy) = win.size().into();
+    let (maxy, maxx) = win.size().into();
     move_to(win, maxx / 2, maxy / 2)?;
-    printw(win, format_args!("Octave: {:?}", position.octave))?;
+    win.put_str(text.octave_name(position.octave)).ok();
     move_to(win, maxx / 2, maxy / 2 + 1)?;
-    printw(
-        win,
-        format_args!("{:?} {:?}", position.note, position.accidental),
-    )?;
+    let note = &text.notes[&position.note];
+    let acc = &text.accidentals[&position.accidental];
+    printw(win, format_args!("{} {}", note, acc))?;
     curses
         .update()
         .map_err(|()| String::from("Failed to update the screen"))?;
