@@ -1,5 +1,6 @@
 #![warn(clippy::all)]
 
+mod curses;
 mod input;
 mod mic;
 mod note;
@@ -16,6 +17,7 @@ use rustfft::num_traits::{Float, Num, Zero};
 use rustfft::FFTnum;
 use rustfft::{FFTplanner, FFT};
 
+use curses::{draw_state, init_curses, is_done};
 use input::Input;
 use mic::{open_microphone, MicSettings};
 use note::Position;
@@ -33,6 +35,7 @@ fn main() -> Result<(), String> {
         .map_err(|e| format!("Failed to initialize input: {}", e))?;
     let fft = make_fft(&input);
     let mut fft_output = vec![Complex::zero(); input.buf_len()];
+    let mut curses = init_curses()?;
     loop {
         let mut inbuf = make_frame_buffer(&mic, &mut input)?;
         fft.process(&mut inbuf, &mut fft_output);
@@ -41,11 +44,15 @@ fn main() -> Result<(), String> {
             let freq = input.frequency_at(max);
             let pos = Position::from_frequency(freq);
             if let Some(pos) = pos {
-                eprintln!("{:?}, {:?}, {:?}", pos.octave, pos.note, pos.accidental);
+                draw_state(&mut curses, pos, freq)?;
+            }
+            if is_done(&mut curses) {
+                break;
             }
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
+    Ok(())
 }
 
 fn make_frame_buffer<'a, T>(
