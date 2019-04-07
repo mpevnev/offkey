@@ -2,6 +2,7 @@
 
 mod input;
 mod mic;
+mod note;
 mod sample;
 
 use std::env::args;
@@ -17,6 +18,7 @@ use rustfft::{FFTplanner, FFT};
 
 use input::Input;
 use mic::{open_microphone, MicSettings};
+use note::Position;
 use sample::FromAnySample;
 
 fn main() -> Result<(), String> {
@@ -36,7 +38,11 @@ fn main() -> Result<(), String> {
         fft.process(&mut inbuf, &mut fft_output);
         let max = max_index(&fft_output[0..fft_output.len() / 2], 1e-3);
         if let Some(max) = max {
-            eprintln!("{}", input.frequency_at(max));
+            let freq = input.frequency_at(max);
+            let pos = Position::from_frequency(freq);
+            if let Some(pos) = pos {
+                eprintln!("{:?}, {:?}, {:?}", pos.octave, pos.note, pos.accidental);
+            }
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
