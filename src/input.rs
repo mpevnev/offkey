@@ -4,29 +4,9 @@ use itertools::Itertools;
 use rustfft::num_complex::Complex;
 use rustfft::num_traits::Num;
 
-use crate::sample::FromAnySample;
+use crate::sample::{FromAnySample, FromSample};
 
 use IOBuf::*;
-
-/* ---------- helper macros ---------- */
-
-macro_rules! read_more {
-    ($self:ident, $io:ident, $scratch:ident, $sample_type:ident) => {{
-        let read = $io.readi($scratch)?;
-        $self.buf.extend(
-            $scratch
-                .iter()
-                .take(read)
-                .cloned()
-                .map($sample_type::from_sample)
-                .chunks($self.num_channels)
-                .into_iter()
-                .map(average)
-                .map(|r| Complex::new(r, T::zero())),
-        );
-        Ok(())
-    }};
-}
 
 /* ---------- main things ---------- */
 
@@ -54,7 +34,7 @@ impl<'a, T: Default> Input<'a, T> {
         let params = pcm.hw_params_current()?;
         let period_size = params.get_period_size()?.max(1) as usize;
         let num_channels = params.get_channels()?.max(1) as usize;
-        let scratchsize = 64 * period_size * num_channels;
+        let scratchsize = period_size * num_channels;
         let src = match params.get_format()? {
             Format::S8 => I8(pcm.io_i8()?, vec![0; scratchsize]),
             Format::U8 => U8(pcm.io_u8()?, vec![0; scratchsize]),
@@ -85,15 +65,16 @@ impl<'a, T: Default> Input<'a, T> {
 
 impl<'a, T: FromAnySample + Num + Clone> Input<'a, T> {
     pub fn read(&mut self) -> alsa::Result<()> {
+        let numch = self.num_channels;
         match &mut self.source {
-            I8(io, scratch) => read_more!(self, io, scratch, T),
-            U8(io, scratch) => read_more!(self, io, scratch, T),
-            I16(io, scratch) => read_more!(self, io, scratch, T),
-            U16(io, scratch) => read_more!(self, io, scratch, T),
-            I32(io, scratch) => read_more!(self, io, scratch, T),
-            U32(io, scratch) => read_more!(self, io, scratch, T),
-            F32(io, scratch) => read_more!(self, io, scratch, T),
-            F64(io, scratch) => read_more!(self, io, scratch, T),
+            I8(io, scratch) => read_into_buf(&mut self.buf, io, scratch, numch),
+            U8(io, scratch) => read_into_buf(&mut self.buf, io, scratch, numch),
+            I16(io, scratch) => read_into_buf(&mut self.buf, io, scratch, numch),
+            U16(io, scratch) => read_into_buf(&mut self.buf, io, scratch, numch),
+            I32(io, scratch) => read_into_buf(&mut self.buf, io, scratch, numch),
+            U32(io, scratch) => read_into_buf(&mut self.buf, io, scratch, numch),
+            F32(io, scratch) => read_into_buf(&mut self.buf, io, scratch, numch),
+            F64(io, scratch) => read_into_buf(&mut self.buf, io, scratch, numch),
         }
     }
 }
@@ -117,6 +98,31 @@ impl<'a, T> Input<'a, T> {
 }
 
 /* ---------- helpers ---------- */
+
+fn read_into_buf<I, T>(
+    buf: &mut CircularBuffer<Complex<T>>,
+    io: &IO<'_, I>,
+    scratch: &mut [I],
+    num_channels: usize,
+) -> alsa::Result<()>
+where
+    I: Copy,
+    T: FromSample<I> + Num + Clone,
+{
+    let read = dbg!(io.readi(scratch))?;
+    buf.extend(
+        scratch
+            .iter()
+            .take(read)
+            .cloned()
+            .map(T::from_sample)
+            .chunks(num_channels)
+            .into_iter()
+            .map(average)
+            .map(|r| Complex::new(r, T::zero())),
+    );
+    Ok(())
+}
 
 fn average<T, I>(iter: T) -> I
 where
