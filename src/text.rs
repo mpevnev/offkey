@@ -2,7 +2,9 @@ use std::collections::HashMap;
 use std::io::Read;
 
 use serde::Deserialize;
+use snafu::{ResultExt, Snafu};
 
+use crate::error;
 use crate::note::{
     Accidental::{self, *},
     Note::{self, *},
@@ -19,22 +21,37 @@ pub struct Text {
     pub missing_octave: String,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Snafu)]
+#[snafu(visibility(pub))]
+pub enum MissingText {
+    #[snafu(display("No text for octave: {}", missing.0))]
+    MissingOctave { missing: Octave },
+    #[snafu(display("No text for note: {:?}", missing))]
+    MissingNote { missing: Note },
+    #[snafu(display("No text for accidental: {:?}", missing))]
+    MissingAccidental { missing: Accidental },
+}
+
 impl Text {
-    pub fn from_reader<R: Read>(reader: R) -> serde_yaml::Result<Text> {
-        serde_yaml::from_reader(reader)
+    pub fn new<R: Read>(reader: R) -> Result<Self, error::Error> {
+        let res: Self = serde_yaml::from_reader(reader)
+            .context(error::TextDeserialization)?;
+        res.validate()
+            .context(error::TextValidation)?;
+        Ok(res)
     }
 
     /// Return an error if a required element is missing.
     ///
     /// In particular, check if all octaves from Sub Contra to the 5th are
     /// present, as well as all notes and accidentals.
-    pub fn validate(&self) -> Result<(), String> {
+    fn validate(&self) -> Result<(), MissingText> {
         all_present(&self.octaves, (0..=8).map(Octave))
-            .map_err(|octave| format!("There's no text for octave {}", octave.0))?;
+            .map_err(|missing| MissingText::MissingOctave { missing })?;
         all_present(&self.notes, [C, D, E, F, G, A ,B].iter().cloned())
-            .map_err(|note| format!("There's no text for note {:?}", note))?;
+            .map_err(|missing| MissingText::MissingNote { missing })?;
         all_present(&self.accidentals, [Natural, Sharp, Flat].iter().cloned())
-            .map_err(|acc| format!("There's no text for accidental {:?}", acc))?;
+            .map_err(|missing| MissingText::MissingAccidental { missing })?;
         Ok(())
     }
 
