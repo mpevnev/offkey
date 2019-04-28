@@ -11,6 +11,7 @@ use IOBuf::*;
 /* ---------- main things ---------- */
 
 pub struct Input<'a, T> {
+    device: &'a PCM,
     source: IOBuf<'a>,
     buf: CircularBuffer<Complex<T>>,
     num_channels: usize,
@@ -29,13 +30,13 @@ pub enum IOBuf<'a> {
 }
 
 impl<'a, T: Default> Input<'a, T> {
-    pub fn from_pcm(pcm: &'a PCM, buffer_millis: usize) -> alsa::Result<Self> {
+    pub fn new(pcm: &'a PCM, buffer_millis: usize) -> alsa::Result<Self> {
         use std::iter::repeat_with;
         let params = pcm.hw_params_current()?;
         let period_size = params.get_period_size()?.max(1) as usize;
         let num_channels = params.get_channels()?.max(1) as usize;
         let scratchsize = period_size * num_channels;
-        let src = match params.get_format()? {
+        let io = match params.get_format()? {
             Format::S8 => I8(pcm.io_i8()?, vec![0; scratchsize]),
             Format::U8 => U8(pcm.io_u8()?, vec![0; scratchsize]),
             Format::S16LE | Format::S16BE => I16(pcm.io_i16()?, vec![0; scratchsize]),
@@ -51,15 +52,25 @@ impl<'a, T: Default> Input<'a, T> {
             _ => return Err(alsa::Error::unsupported("Unsupported sample format")),
         };
         let rate = params.get_rate()?.max(1) as usize;
+        let buffer_size = rate * buffer_millis / 1000;
         let buf = repeat_with(Complex::default)
-            .take(rate * buffer_millis / 1000)
+            .take(buffer_size)
             .collect::<CircularBuffer<_>>();
         Ok(Input {
-            source: src,
+            device: pcm,
+            source: io,
             buf,
             num_channels,
             sample_frequency: rate as f64,
         })
+    }
+}
+
+impl<'a, T: Clone> Input<'a, T> {
+    pub fn clone_fft_data(&self, data: &mut [Complex<T>]) {
+        for (targ, src) in data.iter_mut().zip(self.buf.iter()) {
+            *targ = src.clone();
+        }
     }
 }
 
@@ -79,12 +90,6 @@ impl<'a, T: FromAnySample + Num + Clone> Input<'a, T> {
     }
 }
 
-impl<'a, T: Clone> Input<'a, T> {
-    pub fn get_frames(&self) -> Vec<Complex<T>> {
-        self.buf.iter().cloned().collect()
-    }
-}
-
 impl<'a, T> Input<'a, T> {
     pub fn buf_len(&self) -> usize {
         self.buf.len()
@@ -98,6 +103,21 @@ impl<'a, T> Input<'a, T> {
 }
 
 /* ---------- helpers ---------- */
+
+impl<'a> IOBuf<'a> {
+    fn increase_size(&mut self) {
+        match self {
+            I8(_, vector) => vector.reserve(vector.len()),
+            U8(_, vector) => vector.reserve(vector.len()),
+            I16(_, vector) => vector.reserve(vector.len()),
+            U16(_, vector) => vector.reserve(vector.len()),
+            I32(_, vector) => vector.reserve(vector.len()),
+            U32(_, vector) => vector.reserve(vector.len()),
+            F32(_, vector) => vector.reserve(vector.len()),
+            F64(_, vector) => vector.reserve(vector.len()),
+        }
+    }
+}
 
 fn read_into_buf<I, T>(
     buf: &mut CircularBuffer<Complex<T>>,

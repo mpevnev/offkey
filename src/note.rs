@@ -60,6 +60,7 @@ impl Position {
     pub fn from_frequency<T: Float>(freq: T) -> Option<Self> {
         let freq = freq.to_f64()
             .and_then(|f| if f > 0.0 { Some(f) } else { None })?;
+        dbg!(freq);
         let octave = Octave::from_frequency(freq);
         let offset = octave.frequency_offset(freq);
         if let Some(note) = Note::from_semitone(offset) {
@@ -94,9 +95,6 @@ impl Position {
         from_octave + from_note + from_accidental
     }
 
-    pub fn frequency(&self) -> f64 {
-        self.octave.note_frequency(self.note, self.accidental)
-    }
 }
 
 impl PartialEq for Position {
@@ -119,16 +117,16 @@ impl Octave {
         Octave(octave.floor() as i32)
     }
 
-    pub fn lower_frequency(&self) -> f64 {
+    pub fn lower_frequency(self) -> f64 {
         self.note_frequency(C, Natural)
     }
 
-    pub fn frequency_offset(&self, freq: f64) -> i32 {
+    pub fn frequency_offset(self, freq: f64) -> i32 {
         let semitone = (freq / self.lower_frequency()).log2() * SEMITONES_PER_OCTAVE_F;
         semitone.round() as i32
     }
 
-    pub fn note_frequency(&self, note: Note, acc: Accidental) -> f64 {
+    pub fn note_frequency(self, note: Note, acc: Accidental) -> f64 {
         let semitones_from_octave = self.0 * SEMITONES_PER_OCTAVE;
         let semitones_from_notes = note - A;
         let total = f64::from(
@@ -150,17 +148,17 @@ impl Ord for Octave {
 
 impl Note {
     /// Semitone offset of this note from C in the same octave.
-    pub fn semitone_offset(&self) -> i32 {
-        *self as i32
+    pub fn semitone_offset(self) -> i32 {
+        self as i32
     }
 
     pub fn from_semitone(semitone: i32) -> Option<Self> {
-        [C, D, E, F, G, A, B].into_iter()
+        [C, D, E, F, G, A, B].iter()
             .find(|note| note.semitone_offset() == semitone)
             .cloned()
     }
 
-    pub fn can_be_flat(&self) -> bool {
+    pub fn can_be_flat(self) -> bool {
         match self {
             C => false,
             D => true,
@@ -172,7 +170,7 @@ impl Note {
         }
     }
 
-    pub fn can_be_sharp(&self) -> bool {
+    pub fn can_be_sharp(self) -> bool {
         match self {
             C => true,
             D => true,
@@ -199,7 +197,7 @@ impl Eq for Note { }
 
 impl Accidental {
     /// The shift in semitones this accidental represents.
-    pub fn semitone_shift(&self) -> i32 {
+    pub fn semitone_shift(self) -> i32 {
         match self {
             Flat => -1,
             Sharp => 1,
