@@ -7,7 +7,7 @@ use rustfft::num_complex::Complex;
 use rustfft::num_traits::{Float, Num};
 use rustfft::{FFTnum, FFTplanner, FFT};
 
-use crate::input::Input;
+use crate::alsa_source::AlsaSource;
 use crate::sample::FromAnySample;
 
 /* ---------- main things ---------- */
@@ -16,7 +16,7 @@ pub struct Analyser<'a, T> {
     fft: Arc<dyn FFT<T>>,
     fft_input: Vec<Complex<T>>,
     fft_output: Vec<Complex<T>>,
-    alsa_source: Input<'a, T>,
+    alsa_source: AlsaSource<'a, T>,
 }
 
 impl<'a, T> Analyser<'a, T>
@@ -24,7 +24,7 @@ where
     T: FFTnum + Default,
 {
     pub fn new(pcm: &'a PCM, millis_for_analysis: usize) -> alsa::Result<Self> {
-        let alsa_source = Input::new(pcm, millis_for_analysis)?;
+        let alsa_source = AlsaSource::new(pcm, millis_for_analysis)?;
         let bufsize = alsa_source.buf_len();
         let mut planner = FFTplanner::new(false);
         Ok(Analyser {

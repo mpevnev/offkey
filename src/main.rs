@@ -1,11 +1,11 @@
 #![deny(bare_trait_objects)]
 #![warn(clippy::all)]
 
+mod alsa_source;
 mod analyser;
 mod cli;
 mod curses;
 mod error;
-mod input;
 mod mic;
 mod note;
 mod sample;
@@ -57,29 +57,3 @@ fn main() -> Result<(), error::Error> {
     eprintln!("DONE");
     Ok(())
 }
-
-/*
-fn read_frames<'a, T>(
-    mic: &PCM,
-    input: &mut Input<'a, T>,
-    output: &mut [Complex<T>],
-) -> Result<(), String>
-where
-    T: FromAnySample + Num + Clone,
-{
-    if let Err(e) = input.read() {
-        match e.errno() {
-            Some(Errno::EAGAIN) => {}
-            Some(Errno::EPIPE) => {
-                eprintln!("{}", e);
-                mic.try_recover(e, true)
-                    .map_err(|e| format!("Failed to recover from a EPIPE error: {}", e))?
-            },
-            Some(_) => return Err(format!("Failed to read input: {}", e)),
-            None => {}
-        }
-    };
-    input.copy_frames(output);
-    Ok(())
-}
-*/

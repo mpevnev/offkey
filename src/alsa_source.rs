@@ -6,19 +6,19 @@ use rustfft::num_traits::Num;
 
 use crate::sample::{FromAnySample, FromSample};
 
-use IOBuf::*;
+use InputBuffer::*;
 
 /* ---------- main things ---------- */
 
-pub struct Input<'a, T> {
+pub struct AlsaSource<'a, T> {
     pub device: &'a PCM,
-    source: IOBuf<'a>,
-    buf: CircularBuffer<Complex<T>>,
+    input: InputBuffer<'a>,
+    data: CircularBuffer<Complex<T>>,
     num_channels: usize,
     sample_frequency: f64,
 }
 
-pub enum IOBuf<'a> {
+pub enum InputBuffer<'a> {
     I8(IO<'a, i8>, Vec<i8>),
     U8(IO<'a, u8>, Vec<u8>),
     I16(IO<'a, i16>, Vec<i16>),
@@ -29,7 +29,7 @@ pub enum IOBuf<'a> {
     F64(IO<'a, f64>, Vec<f64>),
 }
 
-impl<'a, T: Default> Input<'a, T> {
+impl<'a, T: Default> AlsaSource<'a, T> {
     pub fn new(pcm: &'a PCM, buffer_millis: usize) -> alsa::Result<Self> {
         use std::iter::repeat_with;
         let params = pcm.hw_params_current()?;
@@ -56,47 +56,47 @@ impl<'a, T: Default> Input<'a, T> {
         let buf = repeat_with(Complex::default)
             .take(buffer_size)
             .collect::<CircularBuffer<_>>();
-        Ok(Input {
+        Ok(AlsaSource {
             device: pcm,
-            source: io,
-            buf,
+            input: io,
+            data: buf,
             num_channels,
             sample_frequency: rate as f64,
         })
     }
 }
 
-impl<'a, T: Clone> Input<'a, T> {
+impl<'a, T: Clone> AlsaSource<'a, T> {
     pub fn clone_fft_data(&self, data: &mut [Complex<T>]) {
-        for (targ, src) in data.iter_mut().zip(self.buf.iter()) {
+        for (targ, src) in data.iter_mut().zip(self.data.iter()) {
             *targ = src.clone();
         }
     }
 }
 
-impl<'a, T: FromAnySample + Num + Clone> Input<'a, T> {
+impl<'a, T: FromAnySample + Num + Clone> AlsaSource<'a, T> {
     pub fn read(&mut self) -> alsa::Result<()> {
         let numch = self.num_channels;
-        match &mut self.source {
-            I8(io, scratch) => read_into_buf(&mut self.buf, io, scratch, numch),
-            U8(io, scratch) => read_into_buf(&mut self.buf, io, scratch, numch),
-            I16(io, scratch) => read_into_buf(&mut self.buf, io, scratch, numch),
-            U16(io, scratch) => read_into_buf(&mut self.buf, io, scratch, numch),
-            I32(io, scratch) => read_into_buf(&mut self.buf, io, scratch, numch),
-            U32(io, scratch) => read_into_buf(&mut self.buf, io, scratch, numch),
-            F32(io, scratch) => read_into_buf(&mut self.buf, io, scratch, numch),
-            F64(io, scratch) => read_into_buf(&mut self.buf, io, scratch, numch),
+        match &mut self.input {
+            I8(io, scratch) => read_into_buf(&mut self.data, io, scratch, numch),
+            U8(io, scratch) => read_into_buf(&mut self.data, io, scratch, numch),
+            I16(io, scratch) => read_into_buf(&mut self.data, io, scratch, numch),
+            U16(io, scratch) => read_into_buf(&mut self.data, io, scratch, numch),
+            I32(io, scratch) => read_into_buf(&mut self.data, io, scratch, numch),
+            U32(io, scratch) => read_into_buf(&mut self.data, io, scratch, numch),
+            F32(io, scratch) => read_into_buf(&mut self.data, io, scratch, numch),
+            F64(io, scratch) => read_into_buf(&mut self.data, io, scratch, numch),
         }
     }
 }
 
-impl<'a, T> Input<'a, T> {
+impl<'a, T> AlsaSource<'a, T> {
     pub fn buf_len(&self) -> usize {
-        self.buf.len()
+        self.data.len()
     }
 
     pub fn expand_input_buffer(&mut self) {
-        self.source.increase_size()
+        self.input.increase_size()
     }
 
     pub fn frequency_at(&self, index: usize) -> f64 {
@@ -108,7 +108,7 @@ impl<'a, T> Input<'a, T> {
 
 /* ---------- helpers ---------- */
 
-impl<'a> IOBuf<'a> {
+impl<'a> InputBuffer<'a> {
     fn increase_size(&mut self) {
         match self {
             I8(_, vector) => vector.reserve(vector.len()),
