@@ -1,3 +1,4 @@
+#![deny(bare_trait_objects)]
 #![warn(clippy::all)]
 
 mod analyser;
@@ -22,6 +23,7 @@ use text::Text;
 use snafu::ResultExt;
 
 fn main() -> Result<(), error::Error> {
+    // Do note that this one will kill the program in case of errors.
     let cli = CLIData::new();
     let set = MicSettings {
         access: Some(alsa::pcm::Access::RWInterleaved),
@@ -36,8 +38,11 @@ fn main() -> Result<(), error::Error> {
     eprintln!("ENTERED THE LOOP");
     loop {
         std::thread::sleep(std::time::Duration::from_millis(100));
-        analyser.read_data().ok();
-        analyser.do_fft();
+        if let Err(error) = analyser.read_data() {
+            analyser.recover(error).context(error::AlsaProcessing)?;
+        } else {
+            analyser.do_fft();
+        }
         if let Some(dominant) = analyser.dominant_frequency() {
             let pos = Position::from_frequency(dominant);
             if let Some(pos) = pos {

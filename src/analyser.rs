@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use alsa::pcm::PCM;
 use ordered_float::NotNan;
+use nix::errno::Errno;
 use rustfft::num_complex::Complex;
 use rustfft::num_traits::{Float, Num};
 use rustfft::{FFTnum, FFTplanner, FFT};
@@ -43,6 +44,19 @@ where
         self.alsa_source.read()?;
         self.alsa_source.clone_fft_data(&mut self.fft_input);
         Ok(())
+    }
+}
+
+impl<'a, T> Analyser<'a, T> {
+    pub fn recover(&mut self, error: alsa::Error) -> alsa::Result<()> {
+        match error.errno() {
+            Some(Errno::EAGAIN) => Ok(()),
+            Some(Errno::EPIPE) => {
+                self.alsa_source.expand_input_buffer();
+                self.alsa_source.device.try_recover(error, true)
+            },
+            _ => Err(error),
+        }
     }
 }
 

@@ -11,7 +11,7 @@ use IOBuf::*;
 /* ---------- main things ---------- */
 
 pub struct Input<'a, T> {
-    device: &'a PCM,
+    pub device: &'a PCM,
     source: IOBuf<'a>,
     buf: CircularBuffer<Complex<T>>,
     num_channels: usize,
@@ -93,6 +93,10 @@ impl<'a, T: FromAnySample + Num + Clone> Input<'a, T> {
 impl<'a, T> Input<'a, T> {
     pub fn buf_len(&self) -> usize {
         self.buf.len()
+    }
+
+    pub fn expand_input_buffer(&mut self) {
+        self.source.increase_size()
     }
 
     pub fn frequency_at(&self, index: usize) -> f64 {
