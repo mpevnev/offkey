@@ -8,7 +8,7 @@ use rustfft::num_traits::{Float, Num};
 use rustfft::{FFTnum, FFTplanner, FFT};
 
 use crate::alsa_source::AlsaSource;
-use crate::sample::FromAnySample;
+use crate::sample::{FromAnySample, Normal};
 
 /* ---------- main things ---------- */
 
@@ -21,7 +21,7 @@ pub struct Analyser<'a, T> {
 
 impl<'a, T> Analyser<'a, T>
 where
-    T: FFTnum + Default,
+    T: FFTnum + Normal + Default,
 {
     pub fn new(pcm: &'a PCM, millis_for_analysis: usize) -> alsa::Result<Self> {
         let alsa_source = AlsaSource::new(pcm, millis_for_analysis)?;
@@ -41,9 +41,7 @@ where
     T: FromAnySample + Num + Clone,
 {
     pub fn read_data(&mut self) -> alsa::Result<()> {
-        self.alsa_source.read()?;
-        self.alsa_source.clone_fft_data(&mut self.fft_input);
-        Ok(())
+        self.alsa_source.read()
     }
 }
 
@@ -65,6 +63,7 @@ where
     T: FFTnum,
 {
     pub fn do_fft(&mut self) {
+        self.alsa_source.clone_fft_data(&mut self.fft_input);
         self.fft.process(&mut self.fft_input, &mut self.fft_output);
     }
 }
@@ -78,6 +77,7 @@ where
             .map(Complex::norm)
             .map(NotNan::new)
             .enumerate()
+            .take(self.fft_output.len() / 2)
             .skip(1)
             .flat_map(|(i, norm)| norm.map(|nonnan| (i, nonnan)))
             .max_by_key(|(_, norm)| *norm)

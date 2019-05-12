@@ -60,7 +60,6 @@ impl Position {
     pub fn from_frequency<T: Float>(freq: T) -> Option<Self> {
         let freq = freq.to_f64()
             .and_then(|f| if f > 0.0 { Some(f) } else { None })?;
-        dbg!(freq);
         let octave = Octave::from_frequency(freq);
         let offset = octave.frequency_offset(freq);
         if let Some(note) = Note::from_semitone(offset) {

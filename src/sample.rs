@@ -1,4 +1,24 @@
-pub trait FromSample<T> {
+/* ---------- A silly thing to abstract away 0.5 ---------- */
+
+pub trait Normal {
+    fn midpoint() -> Self;
+}
+
+impl Normal for f32 {
+    fn midpoint() -> Self {
+        0.5
+    }
+}
+
+impl Normal for f64 {
+    fn midpoint() -> Self {
+        0.5
+    }
+}
+
+/* ---------- The main thing ---------- */
+
+pub trait FromSample<T>: Normal {
     fn from_sample(sample: T) -> Self;
 }
 

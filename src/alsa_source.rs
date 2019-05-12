@@ -4,7 +4,7 @@ use itertools::Itertools;
 use rustfft::num_complex::Complex;
 use rustfft::num_traits::Num;
 
-use crate::sample::{FromAnySample, FromSample};
+use crate::sample::{FromAnySample, FromSample, Normal};
 
 use InputBuffer::*;
 
@@ -29,7 +29,7 @@ pub enum InputBuffer<'a> {
     F64(IO<'a, f64>, Vec<f64>),
 }
 
-impl<'a, T: Default> AlsaSource<'a, T> {
+impl<'a, T: Normal + Clone + Num> AlsaSource<'a, T> {
     pub fn new(pcm: &'a PCM, buffer_millis: usize) -> alsa::Result<Self> {
         use std::iter::repeat_with;
         let params = pcm.hw_params_current()?;
@@ -53,7 +53,7 @@ impl<'a, T: Default> AlsaSource<'a, T> {
         };
         let rate = params.get_rate()?.max(1) as usize;
         let buffer_size = rate * buffer_millis / 1000;
-        let buf = repeat_with(Complex::default)
+        let buf = repeat_with(|| Complex::new(T::midpoint(), T::zero()))
             .take(buffer_size)
             .collect::<CircularBuffer<_>>();
         Ok(AlsaSource {
@@ -133,11 +133,11 @@ where
     I: Copy,
     T: FromSample<I> + Num + Clone,
 {
-    let read = dbg!(io.readi(scratch))?;
+    let read = io.readi(scratch)? * num_channels;
     buf.extend(
         scratch
             .iter()
-            .take(read)
+            .take(read * num_channels)
             .cloned()
             .map(T::from_sample)
             .chunks(num_channels)

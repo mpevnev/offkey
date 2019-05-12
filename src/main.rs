@@ -35,25 +35,20 @@ fn main() -> Result<(), error::Error> {
     let strings_file = File::open(&cli.text_data_file).context(error::TextFileRead)?;
     let text = Text::new(strings_file)?;
     let mut curses = init_curses().context(error::Curses)?;
-    eprintln!("ENTERED THE LOOP");
-    loop {
+    while !is_done(&mut curses) {
         std::thread::sleep(std::time::Duration::from_millis(100));
         if let Err(error) = analyser.read_data() {
             analyser.recover(error).context(error::AlsaProcessing)?;
-        } else {
-            analyser.do_fft();
-        }
+        };
+        analyser.do_fft();
         if let Some(dominant) = analyser.dominant_frequency() {
+            dbg!(dominant);
             let pos = Position::from_frequency(dominant);
             if let Some(pos) = pos {
                 draw_state(&mut curses, &text, pos, dominant)
                     .context(error::Curses)?;
             }
-            if is_done(&mut curses) {
-                break;
-            }
         }
     }
-    eprintln!("DONE");
     Ok(())
 }
